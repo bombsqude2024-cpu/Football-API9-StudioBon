@@ -62,7 +62,6 @@ class SoccerBall(bs.Actor):
 
         shared = bs.SharedObjects.get()
 
-        # Ball material.
         self.ball_material = bs.Material()
 
         self.ball_material.add_actions(
@@ -73,7 +72,6 @@ class SoccerBall(bs.Actor):
             )
         )
 
-        # Create the ball.
         self.node = bs.newnode(
             'prop',
             delegate=self,
@@ -95,22 +93,12 @@ class SoccerBall(bs.Actor):
             },
         )
 
-        self.node.velocity = (
-            0.0,
-            0.0,
-            0.0,
-        )
+        self.node.velocity = (0.0, 0.0, 0.0)
 
     def reset(self) -> None:
-        """Return the ball to the center."""
-
         if self.node.exists():
             self.node.position = BALL_POSITION
-            self.node.velocity = (
-                0.0,
-                0.0,
-                0.0,
-            )
+            self.node.velocity = (0.0, 0.0, 0.0)
             self.node.move_to_front()
 
     def on_expire(self) -> None:
@@ -140,7 +128,6 @@ class SoccerGame(
     """Two-team soccer game."""
 
     name = 'Soccer'
-
     description = 'Score goals with the soccer ball.'
 
     scoreconfig = bs.ScoreConfig(
@@ -173,7 +160,6 @@ class SoccerGame(
         ),
     ]
 
-    @override
     @classmethod
     def supports_session_type(
         cls,
@@ -184,14 +170,11 @@ class SoccerGame(
             bs.DualTeamSession,
         )
 
-    @override
     @classmethod
     def get_supported_maps(
         cls,
         sessiontype: type[bs.Session],
     ) -> list[str]:
-        del sessiontype
-
         return ['Hockey']
 
     def __init__(
@@ -201,26 +184,17 @@ class SoccerGame(
         super().__init__(settings)
 
         self._ball: SoccerBall | None = None
-
         self._goal_locked = False
 
         self._score_to_win = int(
-            settings.get(
-                'Score to Win',
-                5,
-            )
+            settings.get('Score to Win', 5)
         )
 
         self._time_limit = int(
-            settings.get(
-                'Time Limit',
-                0,
-            )
+            settings.get('Time Limit', 0)
         )
 
-        self._score_sound = bs.getsound(
-            'score'
-        )
+        self._score_sound = bs.getsound('score')
 
     # ========================================================
     # TRANSITION
@@ -230,7 +204,6 @@ class SoccerGame(
     def on_transition_in(self) -> None:
         super().on_transition_in()
 
-        # Slight green tint for the pitch.
         self.globalsnode.tint = (
             0.75,
             1.0,
@@ -245,25 +218,19 @@ class SoccerGame(
     def on_begin(self) -> None:
         super().on_begin()
 
-        # Create soccer ball.
         self._ball = SoccerBall()
 
-        # Time limit.
         if self._time_limit > 0:
             self.setup_standard_time_limit(
                 self._time_limit
             )
 
-        # Spawn existing players.
         for player in self.players:
             self.spawn_player(player)
 
-        # Start goal checking.
         bs.timer(
             0.05,
-            bs.WeakCall(
-                self._check_ball
-            ),
+            bs.WeakCall(self._check_ball),
             repeat=True,
         )
 
@@ -348,28 +315,24 @@ class SoccerGame(
         y = position[1]
         z = position[2]
 
-        # Ignore balls that are too high.
         if y < GOAL_Y_MIN or y > GOAL_Y_MAX:
             return
 
-        # Goal must be near the center.
         if abs(z) > GOAL_Z_MAX:
             return
 
-        # LEFT GOAL.
+        # LEFT GOAL
         if x <= LEFT_GOAL_X:
 
-            # Right team scores.
             self.handlemessage(
                 GoalMessage(1)
             )
 
             return
 
-        # RIGHT GOAL.
+        # RIGHT GOAL
         if x >= RIGHT_GOAL_X:
 
-            # Left team scores.
             self.handlemessage(
                 GoalMessage(0)
             )
@@ -411,10 +374,8 @@ class SoccerGame(
 
         self._goal_locked = True
 
-        # Add goal.
         team.score += 1
 
-        # Update game stats.
         try:
             self.stats.player_scored(
                 None,
@@ -424,7 +385,6 @@ class SoccerGame(
         except Exception:
             pass
 
-        # Goal sound.
         try:
             self._score_sound.play(
                 volume=1.0
@@ -432,13 +392,11 @@ class SoccerGame(
         except Exception:
             pass
 
-        # Celebrate.
         try:
             self.celebrate()
         except Exception:
             pass
 
-        # Reset shortly after goal.
         bs.timer(
             RESET_DELAY,
             bs.WeakCall(
@@ -452,21 +410,16 @@ class SoccerGame(
 
     def _reset_after_goal(self) -> None:
 
-        # Check winning score first.
         for team in self.teams:
-
             if team.score >= self._score_to_win:
                 self._finish_game()
                 return
 
-        # Reset ball.
         if self._ball is not None:
             self._ball.reset()
 
-        # Reset players.
         self._reset_players()
 
-        # Unlock goals after cooldown.
         bs.timer(
             GOAL_COOLDOWN,
             bs.WeakCall(
