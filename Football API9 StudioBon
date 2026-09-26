@@ -424,7 +424,27 @@ class SoccerGame(
             GOAL_COOLDOWN,
             bs.WeakCall(
                 self._unlock_goal
-            ),
+# ba_meta export plugin
+
+import bauiv1 as bui
+
+
+class SoccerGamePlugin(bs.Plugin):
+    """Loads the Soccer custom game in API 9."""
+
+    @override
+    def on_app_running(self) -> None:
+        bui.app.meta.load_exported_classes(
+            bs.GameActivity,
+            self._game_loaded,
+            completion_cb_in_bg_thread=True,
+        )
+
+    @staticmethod
+    def _game_loaded(
+        gametypes: list[type[bs.GameActivity]],
+    ) -> None:
+        pass            ),
         )
 
     # ========================================================
