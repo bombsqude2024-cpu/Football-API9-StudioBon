@@ -2,48 +2,24 @@
 
 from __future__ import annotations
 
-from typing import Any, override
+from typing import override
 
 import bascenev1 as bs
-from bascenev1lib.actor.playerspaz import PlayerSpaz
 
 
 # ============================================================
-# SETTINGS
-# ============================================================
-
-BALL_POSITION = (0.0, 1.15, 0.0)
-
-LEFT_PLAYER_POSITION = (-3.5, 1.0, 0.0)
-RIGHT_PLAYER_POSITION = (3.5, 1.0, 0.0)
-
-LEFT_GOAL_X = -5.2
-RIGHT_GOAL_X = 5.2
-
-GOAL_Y_MIN = 0.25
-GOAL_Y_MAX = 2.8
-GOAL_Z_MAX = 1.8
-
-BALL_RADIUS = 0.82
-
-GOAL_COOLDOWN = 2.0
-RESET_DELAY = 0.8
-
-
-# ============================================================
-# PLAYER
+# SOCCER PLAYER
 # ============================================================
 
 class SoccerPlayer(bs.Player['SoccerTeam']):
-    """Soccer player."""
+    pass
 
 
 # ============================================================
-# TEAM
+# SOCCER TEAM
 # ============================================================
 
 class SoccerTeam(bs.Team[SoccerPlayer]):
-    """Soccer team."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -55,20 +31,30 @@ class SoccerTeam(bs.Team[SoccerPlayer]):
 # ============================================================
 
 class SoccerBall(bs.Actor):
-    """A physical spherical soccer ball."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        position: tuple[float, float, float],
+    ) -> None:
+
         super().__init__()
 
         shared = bs.SharedObjects.get()
 
-        self.ball_material = bs.Material()
+        material = bs.Material()
 
-        self.ball_material.add_actions(
+        material.add_actions(
             actions=(
-                ('modify_part_collision', 'friction', 0.15),
-                ('modify_part_collision', 'stiffness', 0.15),
-                ('modify_part_collision', 'damping', 0.02),
+                (
+                    'modify_part_collision',
+                    'friction',
+                    0.15,
+                ),
+                (
+                    'modify_part_collision',
+                    'stiffness',
+                    0.15,
+                ),
             )
         )
 
@@ -76,9 +62,9 @@ class SoccerBall(bs.Actor):
             'prop',
             delegate=self,
             attrs={
-                'position': BALL_POSITION,
+                'position': position,
                 'body': 'sphere',
-                'body_scale': BALL_RADIUS,
+                'body_scale': 0.8,
                 'mesh': bs.getmesh('impactBomb'),
                 'color_texture': bs.gettexture(
                     'impactBombColor'
@@ -88,22 +74,26 @@ class SoccerBall(bs.Actor):
                 'shadow_size': 0.5,
                 'materials': (
                     shared.object_material,
-                    self.ball_material,
+                    material,
                 ),
             },
         )
 
-        self.node.velocity = (0.0, 0.0, 0.0)
+    def reset(
+        self,
+        position: tuple[float, float, float],
+    ) -> None:
 
-    def reset(self) -> None:
-        if self.node.exists():
-            self.node.position = BALL_POSITION
-            self.node.velocity = (0.0, 0.0, 0.0)
-            self.node.move_to_front()
+        if not self.node.exists():
+            return
 
-    def on_expire(self) -> None:
-        if self.node.exists():
-            self.node.delete()
+        self.node.position = position
+
+        self.node.velocity = (
+            0.0,
+            0.0,
+            0.0,
+        )
 
 
 # ============================================================
@@ -111,24 +101,32 @@ class SoccerBall(bs.Actor):
 # ============================================================
 
 class GoalMessage:
-    """Internal message used when a goal is detected."""
 
-    def __init__(self, team_id: int) -> None:
-        self.team_id = team_id
+    def __init__(
+        self,
+        team: SoccerTeam,
+    ) -> None:
+
+        self.team = team
 
 
 # ============================================================
-# GAME
+# SOCCER GAME
 # ============================================================
 
 # ba_meta export bascenev1.GameActivity
 class SoccerGame(
-    bs.TeamGameActivity[SoccerPlayer, SoccerTeam]
+    bs.TeamGameActivity[
+        SoccerPlayer,
+        SoccerTeam,
+    ]
 ):
-    """Two-team soccer game."""
 
     name = 'Soccer'
-    description = 'Score goals with the soccer ball.'
+
+    description = (
+        'Score goals with the soccer ball.'
+    )
 
     scoreconfig = bs.ScoreConfig(
         label='Goals',
@@ -140,6 +138,7 @@ class SoccerGame(
     default_music = bs.MusicType.FOOTBALL
 
     available_settings = [
+
         bs.IntSetting(
             'Score to Win',
             default=5,
@@ -147,9 +146,11 @@ class SoccerGame(
             max_value=99,
             increment=1,
         ),
+
         bs.IntChoiceSetting(
             'Time Limit',
             default=0,
+
             choices=[
                 ('None', 0),
                 ('1 Minute', 60),
@@ -160,41 +161,61 @@ class SoccerGame(
         ),
     ]
 
+    # ========================================================
+    # SESSION
+    # ========================================================
+
     @classmethod
     def supports_session_type(
         cls,
         sessiontype: type[bs.Session],
     ) -> bool:
+
         return issubclass(
             sessiontype,
             bs.DualTeamSession,
         )
+
+    # ========================================================
+    # MAP
+    # ========================================================
 
     @classmethod
     def get_supported_maps(
         cls,
         sessiontype: type[bs.Session],
     ) -> list[str]:
+
         return ['Hockey']
+
+    # ========================================================
+    # INIT
+    # ========================================================
 
     def __init__(
         self,
         settings: dict,
     ) -> None:
+
         super().__init__(settings)
 
         self._ball: SoccerBall | None = None
-        self._goal_locked = False
 
         self._score_to_win = int(
-            settings.get('Score to Win', 5)
+            settings.get(
+                'Score to Win',
+                5,
+            )
         )
 
         self._time_limit = int(
-            settings.get('Time Limit', 0)
+            settings.get(
+                'Time Limit',
+                0,
+            )
         )
 
-        self._score_sound = bs.getsound('score')
+        self._goal_locked = False
 
     # ========================================================
     # TRANSITION
@@ -202,12 +223,13 @@ class SoccerGame(
 
     @override
     def on_transition_in(self) -> None:
+
         super().on_transition_in()
 
         self.globalsnode.tint = (
-            0.75,
+            0.8,
             1.0,
-            0.75,
+            0.8,
         )
 
     # ========================================================
@@ -216,21 +238,32 @@ class SoccerGame(
 
     @override
     def on_begin(self) -> None:
+
         super().on_begin()
 
-        self._ball = SoccerBall()
+        self._ball = SoccerBall(
+            position=(
+                0.0,
+                1.2,
+                0.0,
+            )
+        )
 
         if self._time_limit > 0:
+
             self.setup_standard_time_limit(
                 self._time_limit
             )
 
         for player in self.players:
+
             self.spawn_player(player)
 
         bs.timer(
             0.05,
-            bs.WeakCall(self._check_ball),
+            bs.WeakCall(
+                self._check_ball
+            ),
             repeat=True,
         )
 
@@ -242,13 +275,26 @@ class SoccerGame(
     def spawn_player(
         self,
         player: SoccerPlayer,
-    ) -> PlayerSpaz:
+    ) -> bs.PlayerSpaz:
 
         if player.team.id == 0:
-            position = LEFT_PLAYER_POSITION
+
+            position = (
+                -3.5,
+                1.0,
+                0.0,
+            )
+
             angle = 0.0
+
         else:
-            position = RIGHT_PLAYER_POSITION
+
+            position = (
+                3.5,
+                1.0,
+                0.0,
+            )
+
             angle = 180.0
 
         spaz = self.spawn_player_spaz(
@@ -260,39 +306,6 @@ class SoccerGame(
         player.actor = spaz
 
         return spaz
-
-    # ========================================================
-    # RESET PLAYERS
-    # ========================================================
-
-    def _reset_players(self) -> None:
-
-        for player in self.players:
-
-            spaz = player.actor
-
-            if spaz is None:
-                continue
-
-            if not spaz.node.exists():
-                continue
-
-            if player.team.id == 0:
-                position = LEFT_PLAYER_POSITION
-                angle = 0.0
-            else:
-                position = RIGHT_PLAYER_POSITION
-                angle = 180.0
-
-            spaz.node.position = position
-
-            spaz.node.velocity = (
-                0.0,
-                0.0,
-                0.0,
-            )
-
-            spaz.node.angle = angle
 
     # ========================================================
     # CHECK BALL
@@ -309,62 +322,70 @@ class SoccerGame(
         if self._goal_locked:
             return
 
-        position = self._ball.node.position
-
-        x = position[0]
-        y = position[1]
-        z = position[2]
-
-        if y < GOAL_Y_MIN or y > GOAL_Y_MAX:
-            return
-
-        if abs(z) > GOAL_Z_MAX:
-            return
+        x, y, z = (
+            self._ball.node.position
+        )
 
         # LEFT GOAL
-        if x <= LEFT_GOAL_X:
+        if (
+            x <= -5.2
+            and
+            0.25 <= y <= 2.8
+            and
+            abs(z) <= 1.8
+        ):
 
             self.handlemessage(
-                GoalMessage(1)
+                GoalMessage(
+                    self.teams[1]
+                )
             )
 
-            return
-
         # RIGHT GOAL
-        if x >= RIGHT_GOAL_X:
+        elif (
+            x >= 5.2
+            and
+            0.25 <= y <= 2.8
+            and
+            abs(z) <= 1.8
+        ):
 
             self.handlemessage(
-                GoalMessage(0)
+                GoalMessage(
+                    self.teams[0]
+                )
             )
 
     # ========================================================
-    # MESSAGE
+    # HANDLE MESSAGE
     # ========================================================
 
     @override
     def handlemessage(
         self,
-        msg: Any,
-    ) -> Any:
+        msg: object,
+    ) -> object:
 
-        if isinstance(msg, GoalMessage):
+        if isinstance(
+            msg,
+            GoalMessage,
+        ):
 
-            if self._goal_locked:
-                return None
-
-            self._score_goal(
-                self.teams[msg.team_id]
+            self._goal(
+                msg.team
             )
 
             return None
 
-        return super().handlemessage(msg)
+        return super().handlemessage(
+            msg
+        )
 
     # ========================================================
-    # SCORE GOAL
+    # GOAL
     # ========================================================
 
-    def _score_goal(
+    def _goal(
         self,
         team: SoccerTeam,
     ) -> None:
@@ -376,100 +397,124 @@ class SoccerGame(
 
         team.score += 1
 
-        try:
-            self.stats.player_scored(
-                None,
-                team=team,
-                score=1,
-            )
-        except Exception:
-            pass
+        bs.screenmessage(
+            f'GOAL!  {team.score}',
+            color=(
+                1.0,
+                1.0,
+                0.0,
+            ),
+            scale=2.0,
+        )
 
         try:
-            self._score_sound.play(
-                volume=1.0
-            )
-        except Exception:
-            pass
 
-        try:
-            self.celebrate()
+            bs.getsound(
+                'score'
+            ).play()
+
         except Exception:
             pass
 
         bs.timer(
-            RESET_DELAY,
+            1.0,
             bs.WeakCall(
                 self._reset_after_goal
             ),
         )
 
     # ========================================================
-    # RESET AFTER GOAL
+    # RESET
     # ========================================================
 
-    def _reset_after_goal(self) -> None:
+    def _reset_after_goal(
+        self,
+    ) -> None:
 
-        for team in self.teams:
-            if team.score >= self._score_to_win:
-                self._finish_game()
-                return
+        if (
+            self.teams[0].score
+            >= self._score_to_win
+            or
+            self.teams[1].score
+            >= self._score_to_win
+        ):
+
+            self._end_game()
+
+            return
 
         if self._ball is not None:
-            self._ball.reset()
 
-        self._reset_players()
+            self._ball.reset(
+                (
+                    0.0,
+                    1.2,
+                    0.0,
+                )
+            )
+
+        for player in self.players:
+
+            if player.actor is None:
+                continue
+
+            if not player.actor.node.exists():
+                continue
+
+            if player.team.id == 0:
+
+                player.actor.node.position = (
+                    -3.5,
+                    1.0,
+                    0.0,
+                )
+
+            else:
+
+                player.actor.node.position = (
+                    3.5,
+                    1.0,
+                    0.0,
+                )
+
+            player.actor.node.velocity = (
+                0.0,
+                0.0,
+                0.0,
+            )
 
         bs.timer(
-            GOAL_COOLDOWN,
+            1.0,
             bs.WeakCall(
                 self._unlock_goal
-# ba_meta export plugin
-
-import bauiv1 as bui
-
-
-class SoccerGamePlugin(bs.Plugin):
-    """Loads the Soccer custom game in API 9."""
-
-    @override
-    def on_app_running(self) -> None:
-        bui.app.meta.load_exported_classes(
-            bs.GameActivity,
-            self._game_loaded,
-            completion_cb_in_bg_thread=True,
-        )
-
-    @staticmethod
-    def _game_loaded(
-        gametypes: list[type[bs.GameActivity]],
-    ) -> None:
-        pass            ),
+            ),
         )
 
     # ========================================================
-    # UNLOCK
+    # UNLOCK GOAL
     # ========================================================
 
     def _unlock_goal(self) -> None:
+
         self._goal_locked = False
 
     # ========================================================
     # END GAME
     # ========================================================
 
-    @override
-    def _finish_game(self) -> None:
+    def _end_game(self) -> None:
 
         results = bs.GameResults()
 
-        results.set_game(self)
+        results.set_team_score(
+            self.teams[0],
+            self.teams[0].score,
+        )
 
-        for team in self.teams:
-            results.set_team_score(
-                team,
-                team.score,
-            )
+        results.set_team_score(
+            self.teams[1],
+            self.teams[1].score,
+        )
 
         self.end(
             results=results
